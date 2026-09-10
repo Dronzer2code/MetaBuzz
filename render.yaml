@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: metabuzz-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.cjs
+    envVars:
+      - key: NODE_VERSION
+        value: 20.12.2
+    healthCheckPath: /health

@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": "https://github.com/wsun/multibuzzer",
   "engines": {
-    "node": "20.12.2"
+    "node": "24.x"
   },
   "scripts": {
     "start": "node src/server.cjs",

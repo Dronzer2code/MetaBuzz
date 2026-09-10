@@ -11,7 +11,8 @@ const gameport = process.env.PORT || 4001;
 const url = protocol + '//' + hostname + (port ? ':' + port : '');
 const localUrl = `${protocol}//${hostname}:${gameport}`;
 
-const envServer = process.env.REACT_APP_SERVER_URL;
+const rawEnvServer = process.env.REACT_APP_SERVER_URL;
+const envServer = rawEnvServer ? rawEnvServer.trim().replace(/\/+$/, '') : null;
 const LOBBY_SERVER =
   envServer || (process.env.NODE_ENV === 'production' ? url : localUrl);
 export const GAME_SERVER =

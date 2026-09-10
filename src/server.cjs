@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const serve = require('koa-static');
 const ratelimit = require('koa-ratelimit');
@@ -80,6 +81,9 @@ const server = Server({ games: [Buzzer], generateCredentials: () => uuidv4() });
 const PORT = process.env.PORT || 4001;
 const { app } = server;
 
+// Trust proxy headers (X-Forwarded-For) when running on Render/Railway/reverse proxies
+app.proxy = true;
+
 // Enable CORS for cross-origin frontend deployments (e.g. Vercel)
 app.use(async (ctx, next) => {
   ctx.set('Access-Control-Allow-Origin', '*');
@@ -95,14 +99,26 @@ app.use(async (ctx, next) => {
   await next();
 });
 
+// Health check endpoint for Uptime monitors / Render health checks
+app.use(async (ctx, next) => {
+  if (ctx.path === '/health' || ctx.path === '/ping') {
+    ctx.status = 200;
+    ctx.body = { status: 'ok', uptime: process.uptime() };
+    return;
+  }
+  await next();
+});
+
 const FRONTEND_PATH = path.join(__dirname, '../build');
-app.use(
-  serve(FRONTEND_PATH, {
-    setHeaders: (res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-    },
-  })
-);
+if (fs.existsSync(FRONTEND_PATH)) {
+  app.use(
+    serve(FRONTEND_PATH, {
+      setHeaders: (res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      },
+    })
+  );
+}
 
 function randomString(length, chars) {
   let result = '';
@@ -111,18 +127,19 @@ function randomString(length, chars) {
   return result;
 }
 
-// rate limiter
+// Rate limiter - configured for 140+ concurrent users sharing the same NAT / WiFi IP
 const db = new Map();
 app.use(
   ratelimit({
     driver: 'memory',
     db: db,
     duration: 60000,
-    errorMessage: 'Too many requests',
+    errorMessage: 'Too many requests. Please wait a moment and try again.',
     id: (ctx) => ctx.ip,
-    max: 25,
+    max: 1000,
     whitelist: (ctx) => {
-      return !ctx.path.includes(`games/${Buzzer.name}`);
+      // Exclude health checks from rate limiting
+      return ctx.path === '/health' || ctx.path === '/ping';
     },
   })
 );
@@ -133,11 +150,14 @@ server.run(
     lobbyConfig: { uuid: () => randomString(6, 'ABCDEFGHJKLMNPQRSTUVWXYZ') },
   },
   () => {
-    server.app.use(async (ctx, next) => {
-      await serve(FRONTEND_PATH)(
-        Object.assign(ctx, { path: 'index.html' }),
-        next
-      );
-    });
+    console.log(`> MetaBuzz Game Server is running on port ${PORT}`);
+    if (fs.existsSync(FRONTEND_PATH)) {
+      server.app.use(async (ctx, next) => {
+        await serve(FRONTEND_PATH)(
+          Object.assign(ctx, { path: 'index.html' }),
+          next
+        );
+      });
+    }
   }
 );
